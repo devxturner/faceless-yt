@@ -1,75 +1,74 @@
 from flask import Flask, request, jsonify
 import subprocess
+import os
+import json
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 app = Flask(__name__)
 
-@app.route("/test", methods=["GET"])
-def test_api():
-    """Simple test endpoint to check if the API is running."""
-    return jsonify({"message": "✅ API is running successfully!"}), 200
+# ✅ Google Drive Upload Function
+def upload_to_gdrive(file_path, gdrive_folder_id):
+    """Uploads the final video to Google Drive"""
+    creds = Credentials.from_service_account_file("credentials.json", scopes=["https://www.googleapis.com/auth/drive.file"])
+    service = build("drive", "v3", credentials=creds)
+
+    file_metadata = {
+        "name": os.path.basename(file_path),
+        "parents": [gdrive_folder_id]  # Folder ID in Google Drive
+    }
+    media = MediaFileUpload(file_path, mimetype="video/mp4")
+
+    uploaded_file = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+    file_id = uploaded_file.get("id")
+
+    # Generate a public URL for the uploaded file
+    service.permissions().create(fileId=file_id, body={"role": "reader", "type": "anyone"}).execute()
+    file_url = f"https://drive.google.com/uc?id={file_id}&export=download"
+
+    return file_url
 
 @app.route("/generate-video", methods=["POST"])
 def generate_video():
     try:
-        # Receive Google Drive URLs from n8n
+        # Receive Google Drive Folder ID where the output video should be uploaded
         data = request.get_json()
-        subtitle_url = data.get("subtitle_url")
-        audio_url = data.get("audio_url")
-        image_urls = data.get("image_urls", [])
-        output_url = data.get("output_url")  # This should be a Google Drive folder
+        gdrive_folder_id = data.get("output_folder_id")  # Google Drive folder ID
 
-        # ✅ Ensure URLs are correctly formatted for direct download
-        def fix_gdrive_url(url):
-            if "drive.google.com" in url and "id=" in url:
-                return url.replace("uc?export=download&id=", "uc?id=").strip() + "&export=download"
-            return url
-
-        subtitle_url = fix_gdrive_url(subtitle_url)
-        audio_url = fix_gdrive_url(audio_url)
-        image_urls = [fix_gdrive_url(img) for img in image_urls]
-
-        # ✅ FFmpeg command to create video from images (using URLs)
-        ffmpeg_image_to_video = [
+        # ✅ FFmpeg Command to Process Video
+        ffmpeg_command = [
             "ffmpeg",
             "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", image_urls[0],  # First image URL
-            "-vf", "fps=30",
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
-            "temp_video.mp4"
-        ]
-
-        # Run FFmpeg to create video from images
-        subprocess.run(ffmpeg_image_to_video, check=True)
-
-        # ✅ FFmpeg command to combine video, audio, and subtitles
-        ffmpeg_final_video = [
-            "ffmpeg",
-            "-y",
-            "-i", "temp_video.mp4",  # Video from images
-            "-i", audio_url,  # Audio from Google Drive
-            "-vf", f"subtitles={subtitle_url}",  # Subtitles from Google Drive
+            "-i", "temp_video.mp4",
+            "-i", "audio.mp3",
+            "-vf", "subtitles=subtitle.srt",
             "-c:v", "libx264",
             "-c:a", "aac",
             "-strict", "experimental",
             "-b:a", "192k",
-            "final_video.mp4"
+            "output/final_video.mp4"
         ]
+        
+        subprocess.run(ffmpeg_command, check=True)  # Run FFmpeg
 
-        # Run FFmpeg
-        subprocess.run(ffmpeg_final_video, check=True)
+        # ✅ Upload Video to Google Drive
+        file_url = upload_to_gdrive("output/final_video.mp4", gdrive_folder_id)
 
         return jsonify({
-            "message": "✅ Video processing completed using Google Drive URLs!",
-            "output_video": "final_video.mp4"
+            "message": "✅ Video processing completed!",
+            "video_url": file_url
         }), 200
 
     except subprocess.CalledProcessError as e:
         return jsonify({
             "error": "FFmpeg processing failed",
-            "details": e.stderr
+            "details": str(e)
+        }), 500
+    except Exception as e:
+        return jsonify({
+            "error": "Unexpected error",
+            "details": str(e)
         }), 500
 
 if __name__ == "__main__":
