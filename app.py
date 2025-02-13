@@ -31,10 +31,30 @@ def generate_video():
             "output/final_video.mp4"
         ]
 
-        # Run FFmpeg command
-        subprocess.run(ffmpeg_command, check=True)
+        # Run FFmpeg command and capture output
+        try:
+            result = subprocess.run(
+                ffmpeg_command, 
+                check=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            print("✅ FFmpeg Output:", result.stdout)
+            print("⚠️ FFmpeg Errors:", result.stderr)
 
-        return jsonify({"message": "✅ Video processing started using Google Drive URLs!"}), 200
+            return jsonify({
+                "message": "✅ Video processing started using Google Drive URLs!",
+                "ffmpeg_output": result.stdout,
+                "ffmpeg_errors": result.stderr
+            }), 200
+
+        except subprocess.CalledProcessError as e:
+            print("❌ FFmpeg failed!", e.stderr)
+            return jsonify({
+                "error": "FFmpeg processing failed",
+                "details": e.stderr
+            }), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
