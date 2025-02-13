@@ -1,0 +1,16 @@
+file 'images/image_1.jpg'
+duration 3.0
+file 'images/image_2.jpg'
+duration 3.0
+file 'images/image_3.jpg'
+duration 3.0
+file 'images/image_4.jpg'
+duration 3.0
+file 'images/image_5.jpg'
+duration 3.0
+file 'images/image_6.jpg'
+duration 3.0
+file 'images/image_7.jpg'
+duration 3.0
+file 'images/image_8.jpg'
+duration 13.0
