@@ -116,6 +116,7 @@ def create_slideshow_video(
     ffmpeg_cmd = [
         "ffmpeg",
         "-y",
+        "-protocol_whitelist", "file,pipe,http,https,tcp,tls,crypto",
         "-f", "concat",
         "-safe", "0",
         "-i", "-",  # read concat script from stdin
